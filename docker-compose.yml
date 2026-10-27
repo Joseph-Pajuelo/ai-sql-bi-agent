@@ -1,0 +1,63 @@
+# =====================================================================
+# DOCKER COMPOSE - PROYECTO 2: AI BUSINESS INTELLIGENCE & SQL ANALYST
+# =====================================================================
+# Levanta toda la infraestructura del Proyecto 2 con un solo comando:
+#   docker compose up -d --build
+# Incluye:
+#   1. Base de datos analítica PostgreSQL 16 (`postgres_bi` en puerto 5436)
+#   2. API REST de Inteligencia de Negocios (`bi_api` en http://localhost:8012)
+#   3. Dashboard Cyber-Tech en Streamlit (`bi_dashboard` en http://localhost:8522)
+
+name: ai-sql-bi-agent
+
+services:
+  postgres_bi:
+    image: postgres:16-alpine
+    container_name: commercial_bi_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: commercial_bi_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - pgdata_bi:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d commercial_bi_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  bi_api:
+    build: .
+    container_name: commercial_bi_api
+    restart: unless-stopped
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8012:8001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres_bi:5432/commercial_bi_db
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.8-flash}
+    depends_on:
+      postgres_bi:
+        condition: service_healthy
+
+  bi_dashboard:
+    build: .
+    container_name: commercial_bi_dashboard
+    restart: unless-stopped
+    command: streamlit run src/dashboard/bi_app.py --server.port 8502 --server.address 0.0.0.0 --server.headless true
+    ports:
+      - "8522:8502"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres_bi:5432/commercial_bi_db
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.8-flash}
+    depends_on:
+      postgres_bi:
+        condition: service_healthy
+
+volumes:
+  pgdata_bi:
